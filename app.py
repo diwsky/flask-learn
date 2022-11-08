@@ -30,7 +30,13 @@ def get_store(store_id):
     except KeyError:
         abort(404, message= "Stores not found!")
         
-
+@app.delete('/store/<string:store_id>')
+def delete_store(store_id):
+    try:
+        del stores[store_id]
+        return {"message": "Store deleted."}
+    except KeyError:
+        abort(404, message="Store not found")
 ## items
 
 @app.post('/item')
@@ -64,7 +70,21 @@ def create_item():
 
 @app.put('/item/<string:item_id>')
 def update_item(item_id):
-    pass
+    
+    item_data = request.get_json()
+    
+    if (
+        "price" not in item_data or "name" not in item_data
+    ):
+        abort(400, message=f"Bad vibes, data not completed!")
+        
+    try:
+        item = items[item_id]
+        
+        item |= item_data
+        return item
+    except KeyError:
+        abort(404, message=f"Item not found!!")
 
 @app.delete('/item/<string:item_id>')
 def delete_item(item_id):
