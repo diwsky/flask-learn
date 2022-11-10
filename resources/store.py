@@ -2,17 +2,22 @@ import uuid
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
-from db import stores
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from schemas import StoreSchema
+
+from db import db
+from models import StoreModel
 
 blp = Blueprint("stores", __name__, description="Operation on stores")
 
 @blp.route("/store/<string:store_id>")
 class Store(MethodView):
+    
+    @blp.arguments(StoreSchema)
+    @blp.response(200, StoreSchema)
     def get(self, store_id):
-        try:
-            return stores[store_id]
-        except KeyError:
-            abort(404, message= "Stores not found!")
+        store = StoreModel.query.get_or_404(store_id)
+        return store
     
     def delete(self, store_id):
         try:
@@ -23,16 +28,22 @@ class Store(MethodView):
 
 @blp.route("/store")
 class StoreList(MethodView):
-    def get(self):
-        return {'stores':list(stores.values())}
     
-    def post(self):
-        store_data = request.get_json()
-
-        store_id = uuid.uuid4().hex
-
-        new_store = {"id": store_id, **store_data}
-
-        stores[store_id] = new_store
-
-        return new_store, 201
+    @blp.response(200, StoreSchema(many=True))
+    def get(self):
+        return stores.values()
+    
+    @blp.arguments(StoreSchema)
+    @blp.response(201,StoreSchema)
+    def post(self, store_data):
+        store = StoreModel(**store_data)
+        
+        try:
+            db.session.add(store)
+            db.session.commit()
+        except IntegrityError:
+            abort(400, message="Store already exists!")
+        except SQLAlchemyError:
+            abort(500, message="Error occured when creating store!")
+        
+        return store

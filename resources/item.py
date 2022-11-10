@@ -2,68 +2,64 @@ import uuid
 from flask import request
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
-from db import items
+from sqlalchemy.exc import SQLAlchemyError
+
+from db import db
+from models import ItemModel
+
+from schemas import ItemUpdateSchema, ItemSchema
 
 blp = Blueprint("Items", __name__, description="Operation on Items")
 
-@blp.route("/item/<string:store_id>")
+@blp.route("/item/<string:item_id>")
 class Item(MethodView):
+    
+    @blp.response(200, ItemSchema)
     def get(self, item_id):
-        try:
-            return items[item_id]
-        except KeyError:
-            abort(404, message= "Stores not found!")
+        item = ItemModel.query.get_or_404(item_id)
+        
+        return item
     
     def delete(self, item_id):
-        try:
-            del items[item_id]
-            return {"message": "Item deleted."}
-        except KeyError:
-            abort(404, message="Item not found")
+        item = ItemModel.query.get_or_404(item_id)
+        
+        raise NotImplementedError("Delete not yet implemented")
     
-    def put(self, item_id):
-        item_data = request.get_json()
-
-        if (
-            "price" not in item_data or "name" not in item_data
-        ):
-            abort(400, message=f"Bad vibes, data not completed!")
-
-        try:
-            item = items[item_id]
-
-            item |= item_data
-            return item
-        except KeyError:
-            abort(404, message=f"Item not found!!")
+    @blp.arguments(ItemUpdateSchema)
+    @blp.response(200, ItemSchema)
+    def put(self, item_data, item_id):
+        item = ItemModel.query.get(item_id)
+        
+        if item:
+            item.price = item_data["price"]
+            item.name = item_data["name"]
+        else:
+            item = ItemModel(id=item_id, **item_data)
+        
+        db.session.add(item)
+        db.session.commit()
+        
+        return item
 
 
 @blp.route("/item")
 class ItemList(MethodView):
+    @blp.response(200, ItemSchema(many=True))
     def get(self):
-        return {"items": list(items.values())}
+        item = ItemModel.query.get_or_404()
+        
+        raise NotImplementedError("Delete not yet implemented")
     
-    def post(self):
-        item_data = request.get_json()
+    @blp.arguments(ItemSchema)
+    @blp.response(201, ItemSchema)
+    def post(self, item_data):
 
-        if (
-            "price" not in item_data or
-            "store_id" not in item_data or
-            "name" not in item_data
-        ):
-            abort(400, message="Bad request! Make sure the content is right!")
+        item = ItemModel(**item_data)
+        
+        try:
+            db.session.add(item)
+            db.session.commit()
+        except SQLAlchemyError:
+            abort(500, message="There's error when saving DB!")
 
-        for item in items.values():
-            if (
-                item_data["name"] == item["name"] and
-                item_data["store_id"] == item["store_id"]
-            ):
-                abort(400, message=f"Item already exists!")
-
-        item_id = uuid.uuid4().hex
-
-        new_item = {**item_data, "id": item_id}
-
-        items[item_id] = new_item
-
-        return new_item, 201
+        return item
